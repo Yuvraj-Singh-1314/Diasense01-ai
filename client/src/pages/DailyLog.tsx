@@ -1,0 +1,69 @@
+import { Activity, ArrowLeft, Bell, Droplets, FileDown, Footprints, Moon, Plus, Timer, Waves } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
+import { optionalLogNumber, parseBloodPressure } from "@/lib/dailyHealthInput";
+import { signInPathFor } from "@/lib/authRedirect";
+import DailyLogTrendChart from "@/components/DailyLogTrendChart";
+import { downloadDailyLogsCsv, downloadDailyLogsPdf } from "@/lib/dailyLogExport";
+
+const field = "mt-2 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-3 text-sm text-white outline-none transition focus:border-cyan-300";
+
+function LogItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3"><div className="flex items-center gap-2 text-slate-500">{icon}<span className="mono text-[9px]">{label}</span></div><b className="mt-2 block text-sm text-white">{value}</b></div>;
+}
+
+export default function DailyLog() {
+  const { user, loading, error } = useAuth();
+  const utils = trpc.useUtils();
+  const logs = trpc.dailyLogs.list.useQuery(undefined, { enabled: Boolean(user), refetchOnWindowFocus: true });
+  const exportData = trpc.dailyLogs.exportData.useQuery(undefined, { enabled: Boolean(user) });
+  const reminders = trpc.dailyReminders.status.useQuery(undefined, { enabled: Boolean(user), refetchOnWindowFocus: true });
+  const saveReminder = trpc.dailyReminders.save.useMutation({ onSuccess: () => reminders.refetch() });
+  const markReminderSeen = trpc.dailyReminders.markSeen.useMutation({ onSuccess: () => reminders.refetch() });
+  const create = trpc.dailyLogs.create.useMutation({ onSuccess: () => { utils.dailyLogs.list.invalidate(); setSaved(true); setGlucose(""); setBloodPressure(""); setSteps(""); setSleepHours(""); setWaterMl(""); setMovementMinutes(""); } });
+  const [glucose, setGlucose] = useState("");
+  const [bloodPressure, setBloodPressure] = useState("");
+  const [steps, setSteps] = useState("");
+  const [sleepHours, setSleepHours] = useState("");
+  const [waterMl, setWaterMl] = useState("");
+  const [movementMinutes, setMovementMinutes] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("19:30");
+  const [reminderHydrated, setReminderHydrated] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!reminders.data?.setting || reminderHydrated) return;
+    setReminderEnabled(reminders.data.setting.enabled);
+    setReminderTime(reminders.data.setting.reminderTime);
+    setReminderHydrated(true);
+  }, [reminderHydrated, reminders.data?.setting]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const submit = () => {
+    setSaved(false);
+    setFormError(null);
+    const pressure = bloodPressure.trim() ? parseBloodPressure(bloodPressure) : undefined;
+    if (bloodPressure.trim() && !pressure) { setFormError("Enter blood pressure as 120/80."); return; }
+    const values = [glucose, steps, sleepHours, waterMl, movementMinutes];
+    if (!pressure && values.every(value => !value.trim())) { setFormError("Add at least one real-life check-in value."); return; }
+    create.mutate({ glucose: optionalLogNumber(glucose), systolicPressure: pressure?.systolicPressure, diastolicPressure: pressure?.diastolicPressure, steps: optionalLogNumber(steps), sleepHours: optionalLogNumber(sleepHours), waterMl: optionalLogNumber(waterMl), movementMinutes: optionalLogNumber(movementMinutes) });
+  };
+
+  if (loading) return <div className="app-shell grid min-h-screen place-items-center"><div className="eyebrow">Loading private daily log</div></div>;
+  if (error || !user) return <div className="app-shell grid min-h-screen place-items-center p-6"><div className="panel max-w-md p-8 text-center"><div className="eyebrow">Authentication required</div><h1 className="mt-4 text-2xl font-bold text-white">Sign in to log your day.</h1><p className="mt-3 text-sm leading-6 text-slate-400">Your check-ins stay private to your account.</p><Link href={signInPathFor("/daily-log")} className="btn-primary mt-6 inline-flex px-5 py-3 no-underline">Open secure sign in</Link></div></div>;
+
+  const currentTime = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+  const inAppReminderDue = reminders.data?.setting?.enabled && reminders.data.setting.reminderTime === currentTime;
+  const saveReminderSettings = () => saveReminder.mutate({ enabled: reminderEnabled, reminderTime, timezoneOffsetMinutes: new Date().getTimezoneOffset() });
+
+  return <div className="app-shell"><div className="container-wide py-8"><div className="flex items-center justify-between"><Link href="/dashboard" className="flex items-center gap-2 text-sm text-slate-400 no-underline"><ArrowLeft size={15}/> Back to dashboard</Link><span className="mono text-[10px] text-slate-500">PRIVATE DAILY LOG</span></div>{inAppReminderDue && <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-cyan-300/30 bg-cyan-300/10 p-4"><div className="flex items-center gap-3"><Bell className="text-cyan-300" size={18}/><p className="text-sm text-cyan-50">Your selected check-in time is now. Add today’s health habits whenever you’re ready.</p></div><a href="#daily-check-in" className="text-xs font-semibold text-cyan-300">Log now</a></div>}{reminders.data?.notice && <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-fuchsia-300/25 bg-fuchsia-300/10 p-4"><div><div className="mono text-[9px] text-fuchsia-200">BACKGROUND REMINDER</div><p className="mt-1 text-sm text-fuchsia-50">{reminders.data.notice.message}</p></div><button onClick={() => markReminderSeen.mutate({ noticeId: reminders.data!.notice!.id })} disabled={markReminderSeen.isPending} className="btn-ghost px-3 py-2 text-xs">Mark as seen</button></div>}<div className="mt-12 grid gap-6 lg:grid-cols-[1.05fr_.95fr]"><section><div className="eyebrow">Real-life check-in</div><h1 className="mt-3 text-4xl font-bold tracking-tight text-white">Log today’s healthy habits.</h1><p className="mt-4 max-w-xl leading-7 text-slate-400">Add any readings or habits you want to keep with your account. These entries do not change your diabetes-risk assessment or its model result.</p><div id="daily-check-in" className="panel bracket mt-8 p-6 sm:p-8"><div className="flex items-start justify-between gap-4"><div><div className="mono text-[10px] text-slate-500">TODAY’S CHECK-IN</div><h2 className="mt-2 text-xl font-semibold text-white">Your actual daily data</h2></div><Activity className="text-cyan-300" size={21}/></div><div className="mt-7 grid gap-5 sm:grid-cols-2"><label className="text-sm text-slate-300">Glucose reading<input className={field} value={glucose} onChange={event => setGlucose(event.target.value)} type="number" min="0" placeholder="mg/dL"/></label><label className="text-sm text-slate-300">Blood pressure<input className={field} value={bloodPressure} onChange={event => setBloodPressure(event.target.value)} inputMode="numeric" placeholder="e.g. 120/80"/></label><label className="text-sm text-slate-300">Steps<input className={field} value={steps} onChange={event => setSteps(event.target.value)} type="number" min="0" placeholder="e.g. 6500"/></label><label className="text-sm text-slate-300">Sleep (hours)<input className={field} value={sleepHours} onChange={event => setSleepHours(event.target.value)} type="number" min="0" max="24" step="0.5" placeholder="e.g. 7.5"/></label><label className="text-sm text-slate-300">Water intake (mL)<input className={field} value={waterMl} onChange={event => setWaterMl(event.target.value)} type="number" min="0" placeholder="e.g. 2000"/></label><label className="text-sm text-slate-300">Movement (minutes)<input className={field} value={movementMinutes} onChange={event => setMovementMinutes(event.target.value)} type="number" min="0" placeholder="e.g. 30"/></label></div>{formError && <p className="mt-4 text-sm text-rose-200">{formError}</p>}{create.error && <p className="mt-4 text-sm text-rose-200">{create.error.message}</p>}{saved && <p className="mt-4 text-sm text-emerald-300">Today’s check-in has been saved to your private history.</p>}<button onClick={submit} disabled={create.isPending} className="btn-primary mt-7 inline-flex items-center px-5 py-3"><Plus size={16} className="mr-2"/>{create.isPending ? "Saving check-in…" : "Save today’s check-in"}</button><p className="mt-5 text-xs leading-5 text-slate-500">This is a self-tracking tool, not medical advice or an emergency service. For urgent symptoms, contact local emergency care.</p></div></section><section className="panel p-6 sm:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="eyebrow">Recent history</div><h2 className="mt-2 text-xl font-semibold text-white">Your latest check-ins</h2></div><div className="flex gap-2"><button onClick={() => exportData.data && downloadDailyLogsCsv(exportData.data)} disabled={!exportData.data?.length} className="btn-ghost inline-flex px-3 py-2 text-xs"><FileDown size={14} className="mr-1.5"/>CSV</button><button onClick={() => exportData.data && downloadDailyLogsPdf(user.name ?? "", exportData.data)} disabled={!exportData.data?.length} className="btn-ghost inline-flex px-3 py-2 text-xs"><FileDown size={14} className="mr-1.5"/>PDF</button></div></div><p className="mt-3 text-xs text-slate-500">Exports include only your own saved Daily Health Check-ins.</p>{logs.isLoading ? <p className="mt-8 text-sm text-slate-500">Loading your private log…</p> : logs.isError ? <p className="mt-8 text-sm text-rose-200">Your daily log could not be refreshed. Please try again.</p> : !logs.data?.length ? <div className="mt-8 rounded-lg border border-dashed border-slate-700 p-6 text-sm leading-6 text-slate-500">No check-ins yet. Add your first real-life record from the form.</div> : <div className="mt-7 space-y-4">{logs.data.map(log => <article key={log.id} className="rounded-xl border border-slate-800 bg-slate-950/30 p-4"><div className="flex items-center justify-between"><b className="text-sm text-white">{new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(log.createdAt))}</b><span className="mono text-[9px] text-cyan-300">SAVED</span></div><div className="mt-4 grid grid-cols-2 gap-3">{log.glucose !== null && <LogItem icon={<Waves size={13}/>} label="GLUCOSE" value={`${Number(log.glucose)} mg/dL`}/>} {log.systolicPressure !== null && log.diastolicPressure !== null && <LogItem icon={<Activity size={13}/>} label="BLOOD PRESSURE" value={`${log.systolicPressure}/${log.diastolicPressure}`}/>} {log.steps !== null && <LogItem icon={<Footprints size={13}/>} label="STEPS" value={String(log.steps)}/>} {log.sleepHours !== null && <LogItem icon={<Moon size={13}/>} label="SLEEP" value={`${Number(log.sleepHours)} h`}/>} {log.waterMl !== null && <LogItem icon={<Droplets size={13}/>} label="WATER" value={`${log.waterMl} mL`}/>} {log.movementMinutes !== null && <LogItem icon={<Timer size={13}/>} label="MOVEMENT" value={`${log.movementMinutes} min`}/>}</div></article>)}</div>}</section></div><section className="panel mt-6 p-6 sm:p-8"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="eyebrow">Seven-day progress</div><h2 className="mt-2 text-2xl font-semibold text-white">Your recent daily trends</h2><p className="mt-2 text-sm text-slate-400">Each chart uses your own Daily Health Check-in records. Gaps stay empty rather than being estimated.</p></div><button onClick={() => document.getElementById("reminder-settings")?.scrollIntoView({ behavior: "smooth" })} className="btn-ghost inline-flex shrink-0 px-4 py-3 text-sm"><Bell size={15} className="mr-2"/>Set reminder</button></div><div className="mt-6"><DailyLogTrendChart logs={logs.data ?? []}/></div></section><section id="reminder-settings" className="panel mt-6 p-6 sm:p-8"><div className="eyebrow">Your reminder</div><h2 className="mt-2 text-2xl font-semibold text-white">A check-in cue on your schedule</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">When enabled, an in-app cue appears if this page is open at your selected time. A private background reminder is also saved daily and shown when you next sign in. No emails, SMS, or third-party messaging are used.</p><div className="mt-6 flex flex-col gap-5 rounded-xl border border-slate-800 bg-slate-950/30 p-5 sm:flex-row sm:items-end"><label className="flex items-center gap-3 text-sm text-slate-200"><input checked={reminderEnabled} onChange={event => setReminderEnabled(event.target.checked)} type="checkbox" className="h-4 w-4 accent-cyan-300"/> Enable my daily check-in reminder</label><label className="text-sm text-slate-300">Daily time<input className={`${field} min-w-42`} value={reminderTime} onChange={event => setReminderTime(event.target.value)} type="time"/></label><button onClick={saveReminderSettings} disabled={saveReminder.isPending} className="btn-primary px-5 py-3 text-sm">{saveReminder.isPending ? "Saving…" : "Save reminder"}</button></div>{saveReminder.error && <p className="mt-4 text-sm text-rose-200">{saveReminder.error.message}</p>}{reminders.data?.setting?.enabled && <p className="mt-4 text-sm text-emerald-300">Your reminder is active for {reminders.data.setting.reminderTime} in this browser’s local timezone.</p>}</section></div></div>;
+}

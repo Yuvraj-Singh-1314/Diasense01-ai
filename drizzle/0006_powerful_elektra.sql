@@ -1,0 +1,2 @@
+ALTER TABLE `dailyReminderNotices` ADD `reminderKey` varchar(80) NOT NULL;--> statement-breakpoint
+ALTER TABLE `dailyReminderNotices` ADD CONSTRAINT `dailyReminderNotices_reminderKey_unique` UNIQUE(`reminderKey`);

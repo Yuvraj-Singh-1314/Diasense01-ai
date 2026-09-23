@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1787476035415,
+      "tag": "0000_robust_mandarin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1787476385681,
+      "tag": "0001_flippant_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787477584000,
+      "tag": "0002_numerous_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1787561649002,
+      "tag": "0003_sudden_gambit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787565288104,
+      "tag": "0004_rare_micromacro",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787854573400,
+      "tag": "0005_typical_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787854675456,
+      "tag": "0006_powerful_elektra",
+      "breakpoints": true
+    }
+  ]
+}
